@@ -1,17 +1,21 @@
 #!/bin/bash
-
 set -e
 
-echo "🛠 替换 bullseye-backports 为 archive.debian.org..."
+echo "🧹 清理旧的 bullseye-backports 配置..."
 
-# 写入新的 backports 源
+# 删除所有出现旧 backports 的配置文件
+grep -rl 'bullseye-backports' /etc/apt/ | while read -r file; do
+  echo "🚫 删除旧配置: $file"
+  rm -f "$file"
+done
+
+echo "✅ 添加 archive.debian.org 的 backports 源..."
 echo 'deb http://archive.debian.org/debian bullseye-backports main contrib non-free' > /etc/apt/sources.list.d/backports.list
 
-# 禁用有效期检查（因为 archive 源都已过期）
+echo "⚙️ 禁用有效期检查..."
 echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
 
-# 更新 apt 源
-echo "🔄 执行 apt update..."
+echo "🔄 更新软件包索引..."
 apt update
 
-echo -e "\n✅ 修复完成。现在可以重新运行安装脚本。"
+echo -e "\n✅ 已完成修复，您现在可以继续使用安装脚本。"

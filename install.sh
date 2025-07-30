@@ -175,7 +175,7 @@ cat > /root/wg_client/connection_info.txt <<EOF
 Server IP: $SERVER_IP
 UDP2Raw Port: $PORT
 WireGuard Port: 51820
-Password: password
+Password: 2Zehhj~w}+~yFJ%@H9.k
 Client Config Path: /root/wg_client/client.conf
 EOF
 

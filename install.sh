@@ -19,102 +19,78 @@ generate_password() {
     tr -dc 'A-Za-z0-9!@#$%^&*()_+{}|:<>?=' < /dev/urandom | head -c $length
 }
 
-# Detect public IP
+# Function to detect public IP
 detect_ip() {
-    local ipv4=$(curl -4 -s ifconfig.co)
-    local ipv6=$(curl -6 -s ifconfig.co)
-    echo -e "${BLUE}Detected Server IP Addresses:${NC}"
-    echo -e "IPv4: ${GREEN}$ipv4${NC}"
-    [[ -n "$ipv6" ]] && echo -e "IPv6: ${GREEN}$ipv6${NC}"
+    IPV4=$(curl -4 -s ifconfig.co || echo "未能检测到IPv4地址")
+    IPV6=$(curl -6 -s ifconfig.co || echo "未能检测到IPv6地址")
+    
+    echo -e "${BLUE}检测到的服务器IP地址:${NC}"
+    echo -e "IPv4: ${GREEN}$IPV4${NC}"
+    [[ -n "$IPV6" ]] && echo -e "IPv6: ${GREEN}$IPV6${NC}"
     echo ""
 }
 
-# Get server connection info
-get_connection_info() {
-    detect_ip
-    
-    # IP configuration
-    read -p "Enter your server public IP address [$DEFAULT_IPV4]: " SERVER_IP
-    SERVER_IP=${SERVER_IP:-$DEFAULT_IPV4}
-    
-    # TLS configuration
-    echo -e "\n${BLUE}Optional TLS Configuration:${NC}"
-    read -p "Do you want to configure TLS domain? (y/n) [n]: " USE_TLS
-    USE_TLS=${USE_TLS:-n}
-    
-    if [[ "$USE_TLS" =~ ^[Yy] ]]; then
-        read -p "Enter your domain (e.g. vpn.example.com): " TLS_DOMAIN
-        while [[ -z "$TLS_DOMAIN" ]]; do
-            echo -e "${RED}Domain cannot be empty!${NC}"
-            read -p "Enter your domain: " TLS_DOMAIN
-        done
-        
-        read -p "Enter email for Let's Encrypt (optional): " TLS_EMAIL
-        echo -e "${YELLOW}Note: You need to point your domain to this server's IP before continuing!${NC}"
-        read -p "Press Enter to confirm DNS is configured..."
+# Function to test port availability
+test_port() {
+    local port=$1
+    if ss -tuln | grep -q ":$port "; then
+        echo -e "${RED}端口 $port 已被占用，请选择其他端口！${NC}"
+        return 1
     fi
-}
-
-# Install TLS certificates
-install_tls() {
-    if [[ "$USE_TLS" =~ ^[Yy] ]]; then
-        echo -e "${YELLOW}[TLS] Installing certbot...${NC}"
-        if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
-            apt install -y certbot
-        elif [[ "$OS" == "centos" || "$OS" == "rhel" ]]; then
-            yum install -y certbot
-        fi
-        
-        echo -e "${YELLOW}[TLS] Obtaining certificates...${NC}"
-        if [[ -n "$TLS_EMAIL" ]]; then
-            certbot certonly --standalone --agree-tos --non-interactive --email "$TLS_EMAIL" -d "$TLS_DOMAIN"
-        else
-            certbot certonly --standalone --agree-tos --non-interactive -d "$TLS_DOMAIN"
-        fi
-        
-        # Create renewal hook
-        echo -e "#!/bin/bash\nsystemctl restart udp2raw" > /etc/letsencrypt/renewal-hooks/post/restart-udp2raw.sh
-        chmod +x /etc/letsencrypt/renewal-hooks/post/restart-udp2raw.sh
-    fi
+    return 0
 }
 
 # Main installation
 main() {
     # Initial setup
-    DEFAULT_IPV4=$(curl -4 -s ifconfig.co)
-    get_connection_info
+    clear
+    echo -e "${GREEN}=== UDP2Raw + WireGuard 安装脚本 ===${NC}"
+    detect_ip
+
+    # Get server IP
+    read -p "请输入服务器公网IP地址: " SERVER_IP
+    while [[ -z "$SERVER_IP" ]]; do
+        echo -e "${RED}服务器IP不能为空！${NC}"
+        read -p "请输入服务器公网IP地址: " SERVER_IP
+    done
+
+    # Generate random password
     PASSWORD=$(generate_password)
-    
-    echo -e "\n${GREEN}Generated UDP2Raw password: ${PASSWORD}${NC}"
-    echo -e "${YELLOW}Please save this password as it won't be shown again!${NC}"
-    read -p "Press Enter to continue..."
-    
+    echo -e "${GREEN}生成的UDP2Raw密码: ${PASSWORD}${NC}"
+    echo -e "${YELLOW}请妥善保存此密码，安装完成后不会再次显示！${NC}"
+    read -p "按Enter键继续..."
+
+    # Get port number
+    DEFAULT_PORT=$((RANDOM % 50000 + 10000))
+    read -p "请输入UDP2Raw监听端口 [$DEFAULT_PORT]: " UDP2RAW_PORT
+    UDP2RAW_PORT=${UDP2RAW_PORT:-$DEFAULT_PORT}
+    while ! test_port $UDP2RAW_PORT; do
+        read -p "请重新输入UDP2Raw监听端口: " UDP2RAW_PORT
+    done
+
     # Check OS
     if [[ -f /etc/os-release ]]; then
         . /etc/os-release
         OS=$ID
     else
-        echo -e "${RED}Could not detect OS${NC}"
+        echo -e "${RED}无法检测操作系统${NC}"
         exit 1
     fi
 
     # Install dependencies
-    echo -e "${YELLOW}[1/7] Installing dependencies...${NC}"
+    echo -e "${YELLOW}[1/6] 安装依赖...${NC}"
     if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
         apt update
-        apt install -y git build-essential cmake libssl-dev wireguard qrencode
+        apt install -y git build-essential cmake libssl-dev wireguard qrencode iptables-persistent
     elif [[ "$OS" == "centos" || "$OS" == "rhel" || "$OS" == "fedora" ]]; then
         yum install -y git gcc-c++ make cmake openssl-devel wireguard-tools qrencode
     else
-        echo -e "${RED}Unsupported OS${NC}"
+        echo -e "${RED}不支持的操作系统${NC}"
         exit 1
     fi
 
-    # Install TLS if needed
-    install_tls
-
     # Clone and build udp2raw
-    echo -e "${YELLOW}[2/7] Building udp2raw...${NC}"
+    echo -e "${YELLOW}[2/6] 编译udp2raw...${NC}"
     git clone https://github.com/wangyu-/udp2raw-tunnel.git
     cd udp2raw-tunnel
     make
@@ -123,10 +99,10 @@ main() {
     rm -rf udp2raw-tunnel
 
     # Generate WireGuard config
-    echo -e "${YELLOW}[3/7] Generating WireGuard configuration...${NC}"
+    echo -e "${YELLOW}[3/6] 生成WireGuard配置...${NC}"
     PRIVATE_KEY=$(wg genkey)
     PUBLIC_KEY=$(echo "$PRIVATE_KEY" | wg pubkey)
-    PORT=$((RANDOM % 50000 + 10000))
+    WG_PORT=51820
     CLIENT_IP="10.0.0.2"
 
     # Create WireGuard config
@@ -135,7 +111,7 @@ main() {
 [Interface]
 PrivateKey = $PRIVATE_KEY
 Address = 10.0.0.1/24
-ListenPort = 51820
+ListenPort = $WG_PORT
 PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
 PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
 
@@ -145,17 +121,10 @@ AllowedIPs = 10.0.0.2/32
 EOF
 
     # Create client config
-    echo -e "${YELLOW}[4/7] Creating client configuration...${NC}"
+    echo -e "${YELLOW}[4/6] 生成客户端配置...${NC}"
     mkdir -p /root/wg_client
     CLIENT_PRIVATE_KEY=$(wg genkey)
     CLIENT_PUBLIC_KEY=$(echo "$CLIENT_PRIVATE_KEY" | wg pubkey)
-
-    # Determine endpoint
-    if [[ "$USE_TLS" =~ ^[Yy] ]]; then
-        ENDPOINT="$TLS_DOMAIN:$PORT"
-    else
-        ENDPOINT="$SERVER_IP:$PORT"
-    fi
 
     cat > /root/wg_client/client.conf <<EOF
 [Interface]
@@ -165,7 +134,7 @@ DNS = 8.8.8.8
 
 [Peer]
 PublicKey = $PUBLIC_KEY
-Endpoint = $ENDPOINT
+Endpoint = $SERVER_IP:$UDP2RAW_PORT
 AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = 25
 EOF
@@ -175,24 +144,8 @@ EOF
     wg-quick save wg0
 
     # Create systemd service for udp2raw
-    echo -e "${YELLOW}[5/7] Setting up udp2raw service...${NC}"
-    if [[ "$USE_TLS" =~ ^[Yy] ]]; then
-        cat > /etc/systemd/system/udp2raw.service <<EOF
-[Unit]
-Description=UDP2RAW Tunnel with TLS
-After=network.target
-
-[Service]
-Type=simple
-User=root
-ExecStart=/usr/local/bin/udp2raw -s -l0.0.0.0:$PORT -r127.0.0.1:51820 -k "$PASSWORD" --raw-mode faketcp --tls-cert /etc/letsencrypt/live/$TLS_DOMAIN/fullchain.pem --tls-key /etc/letsencrypt/live/$TLS_DOMAIN/privkey.pem -a
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    else
-        cat > /etc/systemd/system/udp2raw.service <<EOF
+    echo -e "${YELLOW}[5/6] 配置udp2raw服务...${NC}"
+    cat > /etc/systemd/system/udp2raw.service <<EOF
 [Unit]
 Description=UDP2RAW Tunnel
 After=network.target
@@ -200,16 +153,15 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/udp2raw -s -l0.0.0.0:$PORT -r127.0.0.1:51820 -k "$PASSWORD" --raw-mode faketcp -a
+ExecStart=/usr/local/bin/udp2raw -s -l0.0.0.0:$UDP2RAW_PORT -r127.0.0.1:$WG_PORT -k "$PASSWORD" --raw-mode faketcp -a
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOF
-    fi
 
     # Enable and start services
-    echo -e "${YELLOW}[6/7] Starting services...${NC}"
+    echo -e "${YELLOW}[6/6] 启动服务...${NC}"
     systemctl daemon-reload
     systemctl enable wg-quick@wg0
     systemctl enable udp2raw
@@ -217,7 +169,6 @@ EOF
     systemctl start udp2raw
 
     # Create client setup script
-    echo -e "${YELLOW}[7/7] Creating client setup script...${NC}"
     cat > /root/wg_client/setup_client.sh <<EOF
 #!/bin/bash
 
@@ -226,7 +177,7 @@ if [[ -f /etc/os-release ]]; then
     . /etc/os-release
     OS=\$ID
 else
-    echo "Could not detect OS"
+    echo "无法检测操作系统"
     exit 1
 fi
 
@@ -236,7 +187,7 @@ if [[ "\$OS" == "ubuntu" || "\$OS" == "debian" ]]; then
 elif [[ "\$OS" == "centos" || "\$OS" == "rhel" || "\$OS" == "fedora" ]]; then
     yum install -y wireguard-tools qrencode
 else
-    echo "Unsupported OS"
+    echo "不支持的操作系统"
     exit 1
 fi
 
@@ -257,7 +208,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/udp2raw -c -l127.0.0.1:51820 -r$ENDPOINT -k "$PASSWORD" --raw-mode faketcp $([[ "$USE_TLS" =~ ^[Yy] ]] && echo "--tls-verify")
+ExecStart=/usr/local/bin/udp2raw -c -l127.0.0.1:51820 -r$SERVER_IP:$UDP2RAW_PORT -k "$PASSWORD" --raw-mode faketcp -a
 Restart=always
 
 [Install]
@@ -278,21 +229,30 @@ EOF
 
     # Save connection info
     cat > /root/wg_client/connection_info.txt <<EOF
-Server IP: $SERVER_IP
-TLS Domain: ${TLS_DOMAIN:-Not configured}
-UDP2Raw Port: $PORT
-WireGuard Port: 51820
-Password: $PASSWORD
-Connection Mode: $([[ "$USE_TLS" =~ ^[Yy] ]] && echo "TLS (Domain: $TLS_DOMAIN)" || echo "Direct IP")
-Client Config Path: /root/wg_client/client.conf
+服务器IP: $SERVER_IP
+UDP2Raw端口: $UDP2RAW_PORT
+WireGuard端口: $WG_PORT
+密码: $PASSWORD
+客户端配置文件: /root/wg_client/client.conf
 EOF
 
-    echo -e "\n${GREEN}Installation completed!${NC}"
-    echo -e "${BLUE}Connection Information:${NC}"
+    # Configure firewall
+    iptables -A INPUT -p tcp --dport $UDP2RAW_PORT -j ACCEPT
+    iptables -A INPUT -p udp --dport $WG_PORT -j ACCEPT
+    
+    # Save iptables rules
+    if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
+        netfilter-persistent save
+    fi
+
+    # Display results
+    echo -e "\n${GREEN}安装成功完成！${NC}"
+    echo -e "${BLUE}连接信息:${NC}"
     cat /root/wg_client/connection_info.txt
-    echo -e "\n${BLUE}Client configuration QR code:${NC}"
+    echo -e "\n${BLUE}客户端配置二维码:${NC}"
     qrencode -t ansiutf8 < /root/wg_client/client.conf
-    echo -e "\n${YELLOW}Client config file saved to: /root/wg_client/client.conf${NC}"
+    echo -e "\n${YELLOW}客户端配置文件已保存到: /root/wg_client/client.conf${NC}"
+    echo -e "${YELLOW}如需在Linux客户端上自动配置，请运行: bash /root/wg_client/setup_client.sh${NC}"
 }
 
 main

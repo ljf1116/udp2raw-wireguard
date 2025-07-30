@@ -1,65 +1,42 @@
-# wg-udp2raw-autosetup
+# UDP2Raw + WireGuard (faketcp) 一键安装
 
-一个用于绕过 UDP 封锁的 WireGuard + udp2raw 自动部署脚本，支持一键安装 VPS 服务端、自动生成客户端配置与二维码导入。
+此脚本会自动设置一个使用 faketcp 模式的 UDP2Raw + WireGuard VPN 服务器，以绕过 UDP 阻止。
 
----
+## 功能
 
-## 🧱 特性
+- 自动安装所有依赖项
+- 使用安全密钥设置 WireGuard
+- 在 faketcp 模式下配置 UDP2Raw
+- 生成客户端配置
+- 创建二维码，方便在移动设备上设置
 
-- 🚀 一键部署 WireGuard + udp2raw (faketcp)
-- 🧩 自动生成客户端配置文件和二维码（WireGuard 扫码即用）
-- 🔒 支持通过 TCP 伪装穿透防火墙
+## 安装
 
----
-
-## 📦 快速安装
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/ljf1116/wg-udp2raw-autosetup/master/install.sh)
-```
-
----
-
-## 🖥️ 安装 VPS 端
+以 root 身份运行：
 
 ```bash
-git clone https://github.com/ljf1116/wg-udp2raw-autosetup.git
-cd wg-udp2raw-autosetup
-bash install.sh
+wget https://raw.githubusercontent.com/yourusername/udp2raw-wireguard/main/install.sh -O install.sh && chmod +x install.sh && ./install.sh
 ```
 
-选择 "1" 安装服务端（WireGuard + udp2raw）
+## 客户端设置
 
-安装后输出：
+安装完成后，您可以在 `/root/wg_client/` 中找到客户端配置。
 
-- VPS 公钥
-- WireGuard 已自动启动
-- udp2raw 伪装监听 TCP 端口（默认 443）
+1. 对于 Linux 客户端，运行 `setup_client.sh` 脚本。
+2. 对于移动设备，请扫描二维码或导入客户端配置文件。
 
----
+## 生成二维码
 
-## 📱 生成客户端配置（含二维码）
-
-选择 "2" 生成客户端配置，会自动：
-
-- 生成客户端私钥、公钥
-- 创建 `wg0-client.conf` 配置文件
-- 输出二维码图片 `wg_qr.png`（扫码导入 WireGuard）
-- 输出支持扫码/点击导入的 URI 链接
-
----
-
-## 🧰 依赖项
-
-客户端配置脚本依赖：
+要再次显示二维码：
 
 ```bash
-sudo apt install python3-pip
-pip3 install qrcode
+./generate_qr.sh
 ```
 
----
+## 卸载
 
-## 💬 联系作者
+```bash
+./uninstall.sh
+```
 
-GitHub: [ljf1116](https://github.com/ljf1116)
+## 作者: ljf1116

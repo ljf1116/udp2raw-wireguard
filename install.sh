@@ -12,6 +12,25 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+# Function to generate random password
+generate_password() {
+    local length=25
+    tr -dc 'A-Za-z0-9!@#$%^&*()_+{}|:<>?=' < /dev/urandom | head -c $length
+}
+
+# Get server IP interactively
+read -p "Enter your server public IP address: " SERVER_IP
+while [[ -z "$SERVER_IP" ]]; do
+    echo -e "${RED}Server IP cannot be empty!${NC}"
+    read -p "Enter your server public IP address: " SERVER_IP
+done
+
+# Generate random password
+PASSWORD=$(generate_password)
+echo -e "${GREEN}Generated UDP2Raw password: ${PASSWORD}${NC}"
+echo -e "${YELLOW}Please save this password as it won't be shown again!${NC}"
+read -p "Press Enter to continue..."
+
 # Check OS
 if [[ -f /etc/os-release ]]; then
     . /etc/os-release
@@ -22,7 +41,7 @@ else
 fi
 
 # Install dependencies
-echo -e "${YELLOW}Installing dependencies...${NC}"
+echo -e "${YELLOW}[1/6] Installing dependencies...${NC}"
 if [[ "$OS" == "ubuntu" || "$OS" == "debian" ]]; then
     apt update
     apt install -y git build-essential cmake libssl-dev wireguard qrencode
@@ -34,7 +53,7 @@ else
 fi
 
 # Clone and build udp2raw
-echo -e "${YELLOW}Building udp2raw...${NC}"
+echo -e "${YELLOW}[2/6] Building udp2raw...${NC}"
 git clone https://github.com/wangyu-/udp2raw-tunnel.git
 cd udp2raw-tunnel
 make
@@ -42,11 +61,10 @@ cp udp2raw /usr/local/bin/
 cd ..
 rm -rf udp2raw-tunnel
 
-# Generate WireGuard keys and config
-echo -e "${YELLOW}Generating WireGuard configuration...${NC}"
+# Generate WireGuard config
+echo -e "${YELLOW}[3/6] Generating WireGuard configuration...${NC}"
 PRIVATE_KEY=$(wg genkey)
 PUBLIC_KEY=$(echo "$PRIVATE_KEY" | wg pubkey)
-SERVER_IP=$(curl -4 -s ifconfig.co)
 PORT=$((RANDOM % 50000 + 10000))
 CLIENT_IP="10.0.0.2"
 
@@ -66,6 +84,7 @@ AllowedIPs = 10.0.0.2/32
 EOF
 
 # Create client config
+echo -e "${YELLOW}[4/6] Creating client configuration...${NC}"
 mkdir -p /root/wg_client
 CLIENT_PRIVATE_KEY=$(wg genkey)
 CLIENT_PUBLIC_KEY=$(echo "$CLIENT_PRIVATE_KEY" | wg pubkey)
@@ -88,6 +107,7 @@ wg set wg0 peer "$CLIENT_PUBLIC_KEY" allowed-ips "$CLIENT_IP/32"
 wg-quick save wg0
 
 # Create systemd service for udp2raw
+echo -e "${YELLOW}[5/6] Setting up udp2raw service...${NC}"
 cat > /etc/systemd/system/udp2raw.service <<EOF
 [Unit]
 Description=UDP2RAW Tunnel
@@ -96,7 +116,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/udp2raw -s -l0.0.0.0:$PORT -r127.0.0.1:51820 -k "password" --raw-mode faketcp -a
+ExecStart=/usr/local/bin/udp2raw -s -l0.0.0.0:$PORT -r127.0.0.1:51820 -k "$PASSWORD" --raw-mode faketcp -a
 Restart=always
 
 [Install]
@@ -150,7 +170,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/udp2raw -c -l127.0.0.1:51820 -r$SERVER_IP:$PORT -k "password" --raw-mode faketcp -a
+ExecStart=/usr/local/bin/udp2raw -c -l127.0.0.1:51820 -r$SERVER_IP:$PORT -k "$PASSWORD" --raw-mode faketcp -a
 Restart=always
 
 [Install]
@@ -167,7 +187,7 @@ wg-quick up wg0-client
 EOF
 
 # Generate QR code
-echo -e "${YELLOW}Generating QR code...${NC}"
+echo -e "${YELLOW}[6/6] Generating QR code...${NC}"
 qrencode -t ansiutf8 < /root/wg_client/client.conf
 
 # Save connection info
@@ -175,7 +195,7 @@ cat > /root/wg_client/connection_info.txt <<EOF
 Server IP: $SERVER_IP
 UDP2Raw Port: $PORT
 WireGuard Port: 51820
-Password: 2Zehhj~w}+~yFJ%@H9.k
+Password: $PASSWORD
 Client Config Path: /root/wg_client/client.conf
 EOF
 

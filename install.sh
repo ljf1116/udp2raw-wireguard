@@ -72,7 +72,7 @@ DNS = 8.8.8.8
 
 [Peer]
 PublicKey = $SERVER_PUBLIC
-Endpoint = $IP:4096
+Endpoint = $IP:40963
 AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = 25
 EOF

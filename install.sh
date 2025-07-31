@@ -68,7 +68,7 @@ cat > $WG_CLIENT_CONF <<EOF
 [Interface]
 PrivateKey = $CLIENT_PRIVATE
 Address = 10.0.0.2/24
-DNS = 8.8.8.8
+DNS = 1.1.1.1
 
 [Peer]
 PublicKey = $SERVER_PUBLIC

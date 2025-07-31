@@ -60,7 +60,7 @@ tar -zxvf udp2raw.tgz
 mv udp2raw_amd64 /usr/local/bin/udp2raw
 chmod +x /usr/local/bin/udp2raw
 
-nohup udp2raw -s -l0.0.0.0:4096 -r127.0.0.1:$WG_PORT -k "wireguardpass" --raw-mode faketcp -a > /dev/null 2>&1 &
+nohup udp2raw -s -l0.0.0.0:40963 -r127.0.0.1:$WG_PORT -k "wireguardpass" --raw-mode faketcp -a > /dev/null 2>&1 &
 
 # 生成客户端配置
 WG_CLIENT_CONF="wg-client.conf"
@@ -72,7 +72,7 @@ DNS = 8.8.8.8
 
 [Peer]
 PublicKey = $SERVER_PUBLIC
-Endpoint = $IP:40963
+Endpoint = 37.123.194.205:40963
 AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = 25
 EOF

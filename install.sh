@@ -2,8 +2,8 @@
 set -e
 
 # ========== 用户配置部分（请务必修改） ==========
-GITHUB_USERNAME="你的GitHub用户名"
-GITHUB_REPO="你的仓库名"
+GITHUB_USERNAME="ljf1116"
+GITHUB_REPO="udp2raw-wireguard"
 GITHUB_BRANCH="main"  # 或 master，根据你实际分支填写
 # ==============================================
 

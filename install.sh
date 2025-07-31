@@ -72,7 +72,7 @@ DNS = 1.1.1.1
 
 [Peer]
 PublicKey = $SERVER_PUBLIC
-Endpoint = 37.123.194.205:40963
+Endpoint = 127.0.0.1:51820
 AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = 25
 EOF
